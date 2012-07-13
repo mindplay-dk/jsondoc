@@ -42,30 +42,30 @@ Usage
 Connect to a data-store by creating a DocumentStore and pointing it to
 an already existing root-folder:
 
-  $store = new DocumentStore($dbpath);
+    $store = new DocumentStore($dbpath);
 
 Connect to a database by opening a session, specifying a database-name:
 
-  $session = $store->openSession('sampledb');
+    $session = $store->openSession('sampledb');
 
 Now create objects of any class, and store them:
 
-  $a = new Foo;
-  $a->bar = 'Hello, World.';
-
-  $session->store($a, 'foo/bar');
+    $a = new Foo;
+    $a->bar = 'Hello, World.';
+    
+    $session->store($a, 'foo/bar');
 
 Load objects from the database into the current session:
 
-  $b = $session->load('foo/baz');
+    $b = $session->load('foo/baz');
 
 Delete unwanted objects:
 
-  $session->delete('foo/baz');
+    $session->delete('foo/baz');
 
 Then commit all pending store/delete-operations to the database:
 
-  $session->commit();
+    $session->commit();
 
 
 Limitations
@@ -87,4 +87,4 @@ assign a key when you store a new object. Again, this is by design:
 
 More detailed background on limitations and technical decisions here:
 
-  http://stackoverflow.com/questions/10489876
+    http://stackoverflow.com/questions/10489876
