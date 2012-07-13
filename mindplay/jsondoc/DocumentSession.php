@@ -9,6 +9,9 @@ use mindplay\jsonfreeze\JsonSerializer;
  */
 class DocumentSession
 {
+  /**
+   * @var $store DocumentStore
+   */
   protected $store;
   
   /**
@@ -16,6 +19,9 @@ class DocumentSession
    */
   protected $serializer;
   
+  /**
+   * @var $database string
+   */
   protected $database;
   
   /**
@@ -52,6 +58,9 @@ class DocumentSession
   const STATUS_STORE = 1;
   const STATUS_DELETE = -1;
   
+  /**
+   * Opens a new session with the given store and the specified database.
+   */
   public function __construct(DocumentStore $store, $database)
   {
     if (!$store->isValidName($database)) {
@@ -72,7 +81,7 @@ class DocumentSession
   
   public function __destruct()
   {
-    $this->unlockDatabase();
+    $this->close();
   }
   
   /**
@@ -80,7 +89,7 @@ class DocumentSession
    */
   protected function lockDatabase($exclusive=false)
   {
-    $this->unlockDatabase();
+    $this->releaseDatabase();
     
     $lock = @fopen($this->lockPath, 'a');
     
@@ -98,7 +107,7 @@ class DocumentSession
   /**
    * Release a lock on the database associated with this session.
    */
-  protected function unlockDatabase()
+  protected function releaseDatabase()
   {
     if ($this->lock !== null) {
       flock($this->lock, LOCK_UN);
@@ -136,6 +145,10 @@ class DocumentSession
    */
   public function load($id)
   {
+    if ($this->lock === null) {
+	  throw new DocumentException("cannot load an object into a closed session");
+	}
+	
     if (!array_key_exists($id, $this->status)) {
       $path = $this->mapPath($id);
       $data = $this->store->readFile($path);
@@ -156,6 +169,10 @@ class DocumentSession
    */
   public function store($object, $id)
   {
+    if ($this->lock === null) {
+	  throw new DocumentException("cannot store an object in a closed session");
+	}
+	
     $path = $this->mapPath($id);
     
     if (array_key_exists($id, $this->status)) {
@@ -175,6 +192,10 @@ class DocumentSession
    */
   public function getId($object)
   {
+    if ($this->lock === null) {
+	  throw new DocumentException("cannot determine the id of an object in a closed session");
+	}
+	
     $id = array_search($object, $this->objects, true);
     
     if ($id === false) {
@@ -185,12 +206,24 @@ class DocumentSession
   }
   
   /**
+   * @return bool true if an object with the given id is active in this session.
+   */
+  public function contains($id)
+  {
+    return array_key_exists($id, $this->objects);
+  }
+  
+  /**
    * Deletes the object stored under the specified id.
    *
    * The object remains in session until save() is called.
    */
   public function delete($id)
   {
+    if ($this->lock === null) {
+	  throw new DocumentException("cannot delete an object from a closed session");
+	}
+	
     $path = $this->mapPath($id);
     
     if (!file_exists($path)) {
@@ -211,6 +244,10 @@ class DocumentSession
    */
   public function evict($id)
   {
+    if ($this->lock === null) {
+	  throw new DocumentException("cannot evict an object from a closed session");
+	}
+
     $path = $this->mapPath($id);
     unset($this->files[$path]);
     
@@ -221,8 +258,12 @@ class DocumentSession
   /**
    * Commits any changes made during this session.
    */
-  public function save()
+  public function commit()
   {
+    if ($this->lock === null) {
+	  throw new DocumentException("this session has been closed - only an open session can be saved", $e);
+	}
+	
     mt_srand();
     
     $temp = '.' . md5(mt_rand()) . '.tmp';
@@ -293,10 +334,25 @@ class DocumentSession
   /**
    * Cancel all changes made during this session and evict all objects currently in the session.
    */
-  public function cancel()
+  public function flush()
   {
     foreach (array_keys($this->objects) as $id) {
       $this->evict($id);
     }
+  }
+  
+  /**
+   * Closes the session and releases the lock on the database - you must either
+   * save() or cancel() any pending changes prior to calling this method.
+   *
+   * Note that the session is automatically closed when is falls out of scope.
+   */
+  public function close()
+  {
+    if (count($this->files) > 0) {
+	  throw new DocumentException("unable to close session with pending changes - you must either flush() or commit() pending changesm before calling close()");
+	}
+	
+    $this->releaseDatabase();
   }
 }

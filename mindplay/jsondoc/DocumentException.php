@@ -2,6 +2,8 @@
 
 namespace mindplay\jsondoc;
 
+use \Exception;
+
 class DocumentException extends Exception
 {
   protected $innerException = null;
