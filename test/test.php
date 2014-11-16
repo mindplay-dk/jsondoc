@@ -4,128 +4,259 @@
 
 namespace mindplay\jsondoc\test;
 
-header('Content-type: text/plain');
-
-require '../vendor/mindplay/jsonfreeze/mindplay/jsonfreeze/JsonSerializer.php';
-require '../mindplay/jsondoc/DocumentException.php';
-require '../mindplay/jsondoc/DocumentSession.php';
-require '../mindplay/jsondoc/DocumentStore.php';
-
 use mindplay\jsondoc\DocumentStore;
 
-# Sample class:
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use SplFileInfo;
+
+header('Content-type: text/plain');
+
+/** @var \Composer\Autoload\ClassLoader $autoloader */
+$autoloader = require dirname(__DIR__) . '/vendor/autoload.php';
+$autoloader->addPsr4('mindplay\jsondoc\\', dirname(__DIR__) . '/mindplay/jsondoc');
+
+// FIXTURES:
 
 class Foo
 {
-  public $bar;
+    public $bar;
 }
 
-# Test:
+/**
+ * @return DocumentStore
+ */
+function createStore($db_path)
+{
+    $mask = umask(0);
+    @mkdir($db_path, 0666, true);
+    umask($mask);
 
-echo "Executing tests...\n";
-
-$dbpath = dirname(__FILE__) . DIRECTORY_SEPARATOR . 'samplestore';
-
-foreach (glob($dbpath . DIRECTORY_SEPARATOR . '*.json') as $path) {
-  unlink($path);
-  echo "- Clean previous database file: {$path}\n";
+    return new DocumentStore($db_path);
 }
 
-$store = new DocumentStore($dbpath);
+test(
+    'Document store and session behavior',
+    function () {
+        $db_path = dirname(__FILE__) . DIRECTORY_SEPARATOR . 'samplestore';
 
-$session = $store->openSession('sampledb');
+        rm_r($db_path); // clean up from a previous failed run
 
-$a = new Foo;
-$a->bar = 'one';
+        $store = createStore($db_path);
 
-$b = new Foo;
-$b->bar = 'two';
+        $session = $store->openSession('sampledb');
 
-$session->store($a, 'foo/a');
-$session->store($b, 'foo/b');
+        $a = new Foo;
+        $a->bar = 'one';
 
-if (!$session->contains('foo/a')) {
-  die("*** ERROR: first object was incorrectly stored in session");
+        $b = new Foo;
+        $b->bar = 'two';
+
+        $session->store($a, 'foo/a');
+        $session->store($b, 'foo/b');
+
+        ok($session->contains('foo/a'), 'first object correctly stored in session');
+        eq($session->load('foo/a'), $a, 'first object retrieves from session');
+        eq($session->load('foo/b'), $b, 'second object retrieved from session');
+        eq($session->getId($a), 'foo/a', 'can get the ID of a stored object');
+
+        $session->commit();
+
+        eq($session->load('foo/a'), $a, 'can get first stored object after saving');
+        eq($session->load('foo/b'), $b, 'can get second stored object after saving');
+        eq($session->getId($b), 'foo/b', 'ca get the ID of a stored object');
+
+        $session->close();
+
+        unset($a);
+        unset($b);
+
+        ok(file_exists($db_path . '/sampledb/foo/a.json'), 'first document stored in the expected location');
+        ok(file_exists($db_path . '/sampledb/foo/b.json'), 'second document stored in the expected location');
+
+        $session = $store->openSession('sampledb');
+
+        $a = $session->load('foo/a');
+        $b = $session->load('foo/b');
+
+        eq($a->bar, 'one', 'first stored object correctly retrieved');
+        eq($b->bar, 'two', 'second stored object correctly retrieved');
+
+        $session->delete('foo/a');
+
+        ok($session->contains('foo/a'), 'object foo/a should remain in session until changes are committed');
+
+        $session->commit();
+
+        ok(! $session->contains('foo/a'), 'object foo/a was not automatically evicted after commit');
+
+        $session->evict('foo/b');
+
+        ok(! $session->contains('foo/b'), 'object foo/b has been evicted from the session');
+
+        $session->commit();
+
+        ok(! file_exists($db_path . '/sampledb/foo/a.json'), 'file foo/a.json should be deleted');
+
+        ok (file_exists($db_path . '/sampledb/foo/b.json'), 'file foo/b.json should not be deleted');
+
+        $session->close();
+
+        rm_r($db_path); // clean up
+    }
+);
+
+exit(status());
+
+# http://stackoverflow.com/a/3352564/283851
+
+/**
+ * Recursively delete a directory and all of it's contents - e.g.the equivalent of `rm -r` on the command-line.
+ * Consistent with `rmdir()` and `unlink()`, an E_WARNING level error will be generated on failure.
+ *
+ * @param string $dir absolute path to directory to delete
+ *
+ * @return bool true on success; false on failure
+ */
+function rm_r($dir)
+{
+    if (false === file_exists($dir)) {
+        return false;
+    }
+
+    /** @var SplFileInfo[] $files */
+    $files = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+
+    foreach ($files as $fileinfo) {
+        if ($fileinfo->isDir()) {
+            if (false === rmdir($fileinfo->getRealPath())) {
+                return false;
+            }
+        } else {
+            if (false === unlink($fileinfo->getRealPath())) {
+                return false;
+            }
+        }
+    }
+
+    return rmdir($dir);
 }
 
-if ($session->load('foo/a') !== $a) {
-  die("*** ERROR: can't get first stored object");
+// https://gist.github.com/mindplay-dk/4260582
+
+/**
+ * @param string   $name     test description
+ * @param callable $function test implementation
+ */
+function test($name, $function)
+{
+    echo "\n=== $name ===\n\n";
+
+    try {
+        call_user_func($function);
+    } catch (Exception $e) {
+        ok(false, "UNEXPECTED EXCEPTION", $e);
+    }
 }
 
-if ($session->load('foo/b') !== $b) {
-  die("*** ERROR: can't get second stored object");
+/**
+ * @param bool   $result result of assertion
+ * @param string $why    description of assertion
+ * @param mixed  $value  optional value (displays on failure)
+ */
+function ok($result, $why = null, $value = null)
+{
+    if ($result === true) {
+        echo "- PASS: " . ($why === null ? 'OK' : $why) . ($value === null ? '' : ' (' . format($value) . ')') . "\n";
+    } else {
+        echo "# FAIL: " . ($why === null ? 'ERROR' : $why) . ($value === null ? '' : ' - ' . format($value,
+                    true)) . "\n";
+        status(false);
+    }
 }
 
-if ($session->getId($a) !== 'foo/a') {
-  die("*** ERROR: can't get ID of first stored object");
+/**
+ * @param mixed  $value    value
+ * @param mixed  $expected expected value
+ * @param string $why      description of assertion
+ */
+function eq($value, $expected, $why = null)
+{
+    $result = $value === $expected;
+
+    $info = $result
+        ? format($value)
+        : "expected: " . format($expected, true) . ", got: " . format($value, true);
+
+    ok($result, ($why === null ? $info : "$why ($info)"));
 }
 
-$session->commit();
+/**
+ * @param string   $exception_type Exception type name
+ * @param string   $why            description of assertion
+ * @param callable $function       function expected to throw
+ */
+function expect($exception_type, $why, $function)
+{
+    try {
+        call_user_func($function);
+    } catch (Exception $e) {
+        if ($e instanceof $exception_type) {
+            ok(true, $why, $e);
+            return;
+        } else {
+            $actual_type = get_class($e);
+            ok(false, "$why (expected $exception_type but $actual_type was thrown)");
+            return;
+        }
+    }
 
-if ($session->load('foo/a') !== $a) {
-  die("*** ERROR: can't get first stored object after saving");
+    ok(false, "$why (expected exception $exception_type was NOT thrown)");
 }
 
-if ($session->load('foo/b') !== $b) {
-  die("*** ERROR: can't get second stored object after saving");
+/**
+ * @param mixed $value
+ * @param bool  $verbose
+ *
+ * @return string
+ */
+function format($value, $verbose = false)
+{
+    if ($value instanceof Exception) {
+        return get_class($value)
+        . ($verbose ? ": \"" . $value->getMessage() . "\"" : '');
+    }
+
+    if (!$verbose && is_array($value)) {
+        return 'array[' . count($value) . ']';
+    }
+
+    if (is_bool($value)) {
+        return $value ? 'TRUE' : 'FALSE';
+    }
+
+    if (is_object($value) && !$verbose) {
+        return get_class($value);
+    }
+
+    return print_r($value, true);
 }
 
-if ($session->getId($b) !== 'foo/b') {
-  die("*** ERROR: can't get ID of second stored object");
+/**
+ * @param bool|null $status test status
+ *
+ * @return int number of failures
+ */
+function status($status = null)
+{
+    static $failures = 0;
+
+    if ($status === false) {
+        $failures += 1;
+    }
+
+    return $failures;
 }
-
-$session->close();
-
-unset($a);
-unset($b);
-
-if (!file_exists($dbpath.'/sampledb/foo/a.json')) {
-  die("*** ERROR: file foo/a.json was not found");
-}
-
-if (!file_exists($dbpath.'/sampledb/foo/b.json')) {
-  die("*** ERROR: file foo/a.json was not found");
-}
-
-$session = $store->openSession('sampledb');
-
-$a = $session->load('foo/a');
-$b = $session->load('foo/b');
-
-if ($a->bar !== 'one') {
-  die("*** ERROR: object foo/a was not loaded correctly");
-}
-
-if ($b->bar !== 'two') {
-  die("*** ERROR: object foo/b was not loaded correctly");
-}
-
-$session->delete('foo/a');
-
-if (!$session->contains('foo/a')) {
-  die("*** ERROR: object foo/a should remain in session until changes are committed");
-}
-
-$session->commit();
-
-if ($session->contains('foo/a')) {
-  die("*** ERROR: object foo/a was not automatically evicted after commit");
-}
-
-$session->evict('foo/b');
-
-if ($session->contains('foo/b')) {
-  die("*** ERROR: object foo/b was not correctly evicted from session");
-}
-
-$session->commit();
-
-if (file_exists($dbpath.'/sampledb/foo/a.json')) {
-  die("*** ERROR: file foo/a.json was not correctly deleted");
-}
-
-if (!file_exists($dbpath.'/sampledb/foo/b.json')) {
-  die("*** ERROR: file foo/a.json was accidentally deleted");
-}
-
-echo "Tests completed.";
