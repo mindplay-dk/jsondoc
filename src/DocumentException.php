@@ -6,21 +6,29 @@ use Exception;
 
 class DocumentException extends Exception
 {
-    protected $innerException = null;
+    /** @var Exception */
+    protected $inner_exception = null;
 
-    public function __construct($message, $innerException = null)
+    /**
+     * @param string    $message
+     * @param Exception $inner_exception
+     */
+    public function __construct($message, $inner_exception = null)
     {
         parent::__construct($message);
 
-        $this->innerException = $innerException;
+        $this->inner_exception = $inner_exception;
     }
 
+    /**
+     * @return string
+     */
     public function __toString()
     {
         $str = parent::__toString();
 
-        if ($this->innerException !== null) {
-            $str .= "\nInner exception: {$innerException}";
+        if ($this->inner_exception !== null) {
+            $str .= "\nInner exception: {$this->inner_exception}";
         }
 
         return $str;

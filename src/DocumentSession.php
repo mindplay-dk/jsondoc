@@ -15,37 +15,37 @@ class DocumentSession
     protected $store;
 
     /**
-     * @var string
+     * @var string database name
      */
     protected $database;
 
     /**
-     * Root path to the database-folder.
+     * @var string root path to the database-folder.
      */
     protected $path;
 
     /**
-     * Database file-handle for locking.
+     * @var resource file-handle used when locking the database
      */
     protected $lock = null;
 
     /**
-     * Path to the database lock-file.
+     * @var string absolute path to the database lock-file.
      */
     protected $lockPath;
 
     /**
-     * Hash where object_id => object
+     * @var object[] map where object_id => object
      */
     protected $objects = array();
 
     /**
-     * Hash where object_id => object status
+     * @var int[] map where object_id => object status (see STATUS_* constants)
      */
     protected $status = array();
 
     /**
-     * Hash of files to be written on save() - where path => JSON string
+     * @var string[] map of data to be written on save(), where absolute path => JSON string
      */
     protected $files = array();
 
@@ -55,6 +55,11 @@ class DocumentSession
 
     /**
      * Opens a new session with the given store and the specified database.
+     *
+     * @param DocumentStore $store    the Store from which this Session was generated
+     * @param string        $database database name
+     *
+     * @throws DocumentException on invalid database name
      */
     public function __construct(DocumentStore $store, $database)
     {
@@ -63,6 +68,7 @@ class DocumentSession
         }
 
         $path = $store->getPath() . DIRECTORY_SEPARATOR . $database;
+
         $store->ensureDir($path);
 
         $this->store = $store;
@@ -73,6 +79,9 @@ class DocumentSession
         $this->lockDatabase();
     }
 
+    /**
+     * @return void
+     */
     public function __destruct()
     {
         $this->close();
@@ -80,6 +89,13 @@ class DocumentSession
 
     /**
      * Lock the database associated with this session.
+     *
+     * @param bool $exclusive true to lock the session exclusively;
+     *                        or false to lock in shared mode, allowing other sessions to read
+     *
+     * @return void
+     *
+     * @throws DocumentException if unable to lock the database
      */
     protected function lockDatabase($exclusive = false)
     {
@@ -106,6 +122,8 @@ class DocumentSession
 
     /**
      * Release a lock on the database associated with this session.
+     *
+     * @return void
      */
     protected function releaseDatabase()
     {
@@ -117,6 +135,12 @@ class DocumentSession
 
     /**
      * Maps the given id to a physical path.
+     *
+     * @param string $id document ID
+     *
+     * @return string absolutel path to JSON document file
+     *
+     * @throws DocumentException if the given document ID is invalid
      */
     protected function mapPath($id)
     {
@@ -142,7 +166,11 @@ class DocumentSession
     /**
      * Loads the object with the specified id.
      *
-     * @return object
+     * @param string $id document ID
+     *
+     * @return object the loaded object
+     *
+     * @throws DocumentException if the object could not be loaded for any reason
      */
     public function load($id)
     {
@@ -167,6 +195,11 @@ class DocumentSession
 
     /**
      * Stores the given object under the specified id.
+     *
+     * @param object $object the object to store
+     * @param string $id the document ID to store the object under
+     *
+     * @throws DocumentException if the document could not be stored for any reason
      */
     public function store($object, $id)
     {
@@ -190,6 +223,12 @@ class DocumentSession
     /**
      * Returns the id of a given object, already present in the active session.
      * If no object with the given id is present, a DocumentException is thrown.
+     *
+     * @param object $object an object already present in this Session
+     *
+     * @throws DocumentException if the given object isn't present in this Session
+     *
+     * @return object
      */
     public function getId($object)
     {
@@ -207,7 +246,9 @@ class DocumentSession
     }
 
     /**
-     * @return bool true if an object with the given id is active in this session.
+     * @param string $id document ID
+     *
+     * @return bool true, if an object with the given id is active in this session; otherwise false
      */
     public function contains($id)
     {
@@ -218,6 +259,10 @@ class DocumentSession
      * Deletes the object stored under the specified id.
      *
      * The object remains in session until save() is called.
+     *
+     * @param string $id document ID
+     *
+     * @throws DocumentException if unable to delete the document with the given ID
      */
     public function delete($id)
     {
@@ -242,6 +287,12 @@ class DocumentSession
     /**
      * Evicts the object with the given id from the current session, canceling any changes
      * made to the object during this session.
+     *
+     * @param string $id document ID
+     *
+     * @throws DocumentException on attempt to evict an object from a Session that is already closed
+     *
+     * @return void
      */
     public function evict($id)
     {
@@ -258,11 +309,15 @@ class DocumentSession
 
     /**
      * Commits any changes made during this session.
+     *
+     * @return void
+     *
+     * @throws DocumentException if the commit operation is in any way unsuccessful
      */
     public function commit()
     {
         if ($this->lock === null) {
-            throw new DocumentException("this session has been closed - only an open session can be saved", $e);
+            throw new DocumentException("this session has been closed - only an open session can be saved");
         }
 
         mt_srand();
@@ -328,6 +383,8 @@ class DocumentSession
 
     /**
      * Cancel all changes made during this session and evict all objects currently in the session.
+     *
+     * @return void
      */
     public function flush()
     {
@@ -341,11 +398,15 @@ class DocumentSession
      * save() or cancel() any pending changes prior to calling this method.
      *
      * Note that the session is automatically closed when is falls out of scope.
+     *
+     * @throws DocumentException if closed without either calling flush() or commit() first
+     *
+     * @return void
      */
     public function close()
     {
         if (count($this->files) > 0) {
-            throw new DocumentException("unable to close session with pending changes - you must either flush() or commit() pending changesm before calling close()");
+            throw new DocumentException("unable to close session with pending changes - you must either flush() or commit() pending changes before calling close()");
         }
 
         $this->releaseDatabase();
