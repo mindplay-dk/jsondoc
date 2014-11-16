@@ -64,7 +64,7 @@ class DocumentSession
     public function __construct(DocumentStore $store, $database)
     {
         if (!$store->isValidName($database)) {
-            throw new DocumentException("invalid database name: {$name}");
+            throw new DocumentException("invalid database name: {$database}");
         }
 
         $path = $store->getPath() . DIRECTORY_SEPARATOR . $database;
@@ -91,7 +91,13 @@ class DocumentSession
     {
         $this->releaseDatabase();
 
+        $mask = umask(0);
+
         $lock = @fopen($this->lockPath, 'a');
+
+        @chmod($this->lockPath, 0666);
+
+        umask($mask);
 
         if ($lock === false) {
             throw new DocumentException("unable to create the lock-file: {$this->lockPath}");
@@ -296,8 +302,7 @@ class DocumentSession
 
             $this->lockDatabase(false);
 
-            throw new DocumentException("an error occurred while committing changes to documents - changes were rolled back",
-                $e);
+            throw new DocumentException("an error occurred while committing changes to documents - changes were rolled back", $e);
         }
 
         try {
@@ -309,8 +314,7 @@ class DocumentSession
                 }
             }
         } catch (DocumentException $e) {
-            throw new DocumentException("an error occurred while committing changes to documents - changes could not be rolled back!",
-                $e);
+            throw new DocumentException("an error occurred while committing changes to documents - changes could not be rolled back!", $e);
         }
 
         $this->lockDatabase(false);

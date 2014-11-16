@@ -71,7 +71,11 @@ class DocumentStore
             return;
         }
 
-        if (@mkdir($path, $this->dirMode, true) !== true) {
+        $mask = umask(0);
+        $success = @mkdir($path, $this->dirMode, true) !== false;
+        umask($mask);
+
+        if (false === $success) {
             throw new DocumentException("unable to create directory: {$path}");
         }
     }
@@ -98,11 +102,18 @@ class DocumentStore
     {
         $this->ensureDir(dirname($path));
 
-        if (@file_put_contents($path, $data) === false) {
+        $mask = umask(0);
+
+        $file_written = @file_put_contents($path, $data) !== false;
+        $mode_set = @chmod($path, $this->fileMode) !== false;
+
+        umask($mask);
+
+        if (false === $file_written) {
             throw new DocumentException("unable to write file: {$path}");
         }
 
-        if (@chmod($path, $this->fileMode) === false) {
+        if (false === $mode_set) {
             throw new DocumentException("unable to set file mode: {$path}");
         }
     }
