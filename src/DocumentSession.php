@@ -10,17 +10,12 @@ use mindplay\jsonfreeze\JsonSerializer;
 class DocumentSession
 {
     /**
-     * @var $store DocumentStore
+     * @var DocumentStore the Document Store from which this Session was created
      */
     protected $store;
 
     /**
-     * @var $serializer JsonSerializer
-     */
-    protected $serializer;
-
-    /**
-     * @var $database string
+     * @var string
      */
     protected $database;
 
@@ -71,7 +66,6 @@ class DocumentSession
         $store->ensureDir($path);
 
         $this->store = $store;
-        $this->serializer = $store->getSerializer();
         $this->database = $database;
         $this->path = $path;
 
@@ -160,7 +154,7 @@ class DocumentSession
             $path = $this->mapPath($id);
             $data = $this->store->readFile($path);
 
-            $this->objects[$id] = $this->serializer->unserialize($data);
+            $this->objects[$id] = $this->store->getSerializer()->unserialize($data);
             $this->status[$id] = self::STATUS_KEEP;
         }
 
@@ -188,7 +182,7 @@ class DocumentSession
             }
         }
 
-        $this->files[$path] = $this->serializer->serialize($object);
+        $this->files[$path] = $this->store->getSerializer()->serialize($object);
         $this->objects[$id] = $object;
         $this->status[$id] = self::STATUS_STORE;
     }
