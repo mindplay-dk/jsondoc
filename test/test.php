@@ -41,7 +41,7 @@ function createStore($db_path)
 if (coverage()) {
     $filter = coverage()->filter();
 
-    $filter->addDirectoryToWhitelist(dirname(__DIR__) . '/mindplay/jsondoc');
+    $filter->addDirectoryToWhitelist(dirname(__DIR__) . '/src');
 
     coverage()->start('test');
 }
