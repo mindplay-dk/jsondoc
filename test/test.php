@@ -1,7 +1,5 @@
 <?php
 
-# This will eventually be a unit-test...
-
 namespace mindplay\jsondoc\test;
 
 use mindplay\jsondoc\DocumentStore;
@@ -9,6 +7,11 @@ use mindplay\jsondoc\DocumentStore;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;
+
+use PHP_CodeCoverage;
+use PHP_CodeCoverage_Exception;
+use PHP_CodeCoverage_Report_Clover;
+use PHP_CodeCoverage_Report_Text;
 
 header('Content-type: text/plain');
 
@@ -33,6 +36,14 @@ function createStore($db_path)
     umask($mask);
 
     return new DocumentStore($db_path);
+}
+
+if (coverage()) {
+    $filter = coverage()->filter();
+
+    $filter->addDirectoryToWhitelist(dirname(__DIR__) . '/mindplay/jsondoc');
+
+    coverage()->start('test');
 }
 
 test(
@@ -105,6 +116,16 @@ test(
         rm_r($db_path); // clean up
     }
 );
+
+if (coverage()) {
+    coverage()->stop();
+
+    $report = new PHP_CodeCoverage_Report_Text(10, 90, false, false);
+    echo $report->process(coverage(), false);
+
+    $report = new PHP_CodeCoverage_Report_Clover();
+    $report->process(coverage(), 'build/logs/clover.xml');
+}
 
 exit(status());
 
@@ -259,4 +280,28 @@ function status($status = null)
     }
 
     return $failures;
+}
+
+/**
+ * @return PHP_CodeCoverage|null code coverage service, if available
+ */
+function coverage()
+{
+    static $coverage = null;
+
+    if ($coverage === false) {
+        return null; // code coverage unavailable
+    }
+
+    if ($coverage === null) {
+        try {
+            $coverage = new PHP_CodeCoverage;
+        } catch (PHP_CodeCoverage_Exception $e) {
+            echo "# Notice: no code coverage run-time available\n";
+            $coverage = false;
+            return null;
+        }
+    }
+
+    return $coverage;
 }

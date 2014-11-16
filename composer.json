@@ -1,19 +1,24 @@
 {
-  "name": "mindplay/jsondoc",
-  "type": "library",
-  "description": "JSON-based object/document store",
-  "license": "LGPL-3.0+",
-  "authors": [{
-    "name": "Rasmus Schultz",
-    "email": "rasmus@mindplay.dk"
-  }],
-  "require": {
-    "php": ">=5.3.0",
-    "mindplay/jsonfreeze": ">= 1.0.1"
-  },
-  "autoload": {
-      "psr-0": {
-          "mindplay\\jsondoc": ""
-      }
-  }
+    "name": "mindplay/jsondoc",
+    "type": "library",
+    "description": "JSON-based object/document store",
+    "license": "LGPL-3.0+",
+    "authors": [
+        {
+            "name": "Rasmus Schultz",
+            "email": "rasmus@mindplay.dk"
+        }
+    ],
+    "require": {
+        "php": ">=5.3.0",
+        "mindplay/jsonfreeze": ">= 1.0.1"
+    },
+    "require-dev": {
+        "phpunit/php-code-coverage": "3.0.*@dev"
+    },
+    "autoload": {
+        "psr-0": {
+            "mindplay\\jsondoc": ""
+        }
+    }
 }
