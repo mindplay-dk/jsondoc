@@ -53,6 +53,10 @@ test(
 
         rm_r($db_path); // clean up from a previous failed run
 
+        $mask = umask(0);
+        mkdir($db_path, 0666);
+        umask($mask);
+
         $store = createStore($db_path);
 
         $session = $store->openSession('sampledb');
