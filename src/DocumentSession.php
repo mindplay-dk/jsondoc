@@ -25,16 +25,6 @@ class DocumentSession
     protected $path;
 
     /**
-     * @var resource file-handle used when locking the database
-     */
-    protected $lock = null;
-
-    /**
-     * @var string absolute path to the database lock-file.
-     */
-    protected $lockPath;
-
-    /**
      * @var object[] map where object_id => object
      */
     protected $objects = array();
@@ -48,6 +38,16 @@ class DocumentSession
      * @var string[] map of data to be written on save(), where absolute path => JSON string
      */
     protected $files = array();
+
+    /**
+     * @var string absolute path to the database lock-file.
+     */
+    protected $lock_path;
+
+    /**
+     * @var resource file-handle used when locking the database
+     */
+    private $_lock = null;
 
     const STATUS_KEEP = 0;
     const STATUS_STORE = 1;
@@ -75,8 +75,8 @@ class DocumentSession
         $this->database = $database;
         $this->path = $path;
 
-        $this->lockPath = $this->path . DIRECTORY_SEPARATOR . '.lock';
-        $this->lockDatabase();
+        $this->lock_path = $this->path . DIRECTORY_SEPARATOR . '.lock';
+        $this->lock();
     }
 
     /**
@@ -97,27 +97,27 @@ class DocumentSession
      *
      * @throws DocumentException if unable to lock the database
      */
-    protected function lockDatabase($exclusive = false)
+    protected function lock($exclusive = false)
     {
-        $this->releaseDatabase();
+        $this->unlock();
 
         $mask = umask(0);
 
-        $lock = @fopen($this->lockPath, 'a');
+        $lock = @fopen($this->lock_path, 'a');
 
-        @chmod($this->lockPath, 0666);
+        @chmod($this->lock_path, 0666);
 
         umask($mask);
 
         if ($lock === false) {
-            throw new DocumentException("unable to create the lock-file: {$this->lockPath}");
+            throw new DocumentException("unable to create the lock-file: {$this->lock_path}");
         }
 
         if (@flock($lock, $exclusive === true ? LOCK_EX : LOCK_SH) === false) {
-            throw new DocumentException("unable to lock the database: {$this->lockPath}");
+            throw new DocumentException("unable to lock the database: {$this->lock_path}");
         }
 
-        $this->lock = $lock;
+        $this->_lock = $lock;
     }
 
     /**
@@ -125,12 +125,21 @@ class DocumentSession
      *
      * @return void
      */
-    protected function releaseDatabase()
+    protected function unlock()
     {
-        if ($this->lock !== null) {
-            flock($this->lock, LOCK_UN);
-            $this->lock = null;
+        if ($this->isLocked()) {
+            flock($this->_lock, LOCK_UN);
+
+            $this->_lock = null;
         }
+    }
+
+    /**
+     * @return bool true, if the database is currently locked
+     */
+    protected function isLocked()
+    {
+        return $this->_lock !== null;
     }
 
     /**
@@ -174,7 +183,7 @@ class DocumentSession
      */
     public function load($id)
     {
-        if ($this->lock === null) {
+        if (! $this->isLocked()) {
             throw new DocumentException("cannot load an object into a closed session");
         }
 
@@ -203,7 +212,7 @@ class DocumentSession
      */
     public function store($object, $id)
     {
-        if ($this->lock === null) {
+        if (! $this->isLocked()) {
             throw new DocumentException("cannot store an object in a closed session");
         }
 
@@ -232,7 +241,7 @@ class DocumentSession
      */
     public function getId($object)
     {
-        if ($this->lock === null) {
+        if (! $this->isLocked()) {
             throw new DocumentException("cannot determine the id of an object in a closed session");
         }
 
@@ -266,7 +275,7 @@ class DocumentSession
      */
     public function delete($id)
     {
-        if ($this->lock === null) {
+        if (! $this->isLocked()) {
             throw new DocumentException("cannot delete an object from a closed session");
         }
 
@@ -296,7 +305,7 @@ class DocumentSession
      */
     public function evict($id)
     {
-        if ($this->lock === null) {
+        if (! $this->isLocked()) {
             throw new DocumentException("cannot evict an object from a closed session");
         }
 
@@ -316,7 +325,7 @@ class DocumentSession
      */
     public function commit()
     {
-        if ($this->lock === null) {
+        if (! $this->isLocked()) {
             throw new DocumentException("this session has been closed - only an open session can be saved");
         }
 
@@ -324,7 +333,7 @@ class DocumentSession
 
         $temp = '.' . md5(mt_rand()) . '.tmp';
 
-        $this->lockDatabase(true);
+        $this->lock(true);
 
         try {
             foreach ($this->files as $path => $data) {
@@ -349,7 +358,7 @@ class DocumentSession
                 }
             }
 
-            $this->lockDatabase(false);
+            $this->lock(false);
 
             throw new DocumentException("an error occurred while committing changes to documents - changes were rolled back", $e);
         }
@@ -366,7 +375,7 @@ class DocumentSession
             throw new DocumentException("an error occurred while committing changes to documents - changes could not be rolled back!", $e);
         }
 
-        $this->lockDatabase(false);
+        $this->lock(false);
 
         $this->files = array();
 
@@ -409,6 +418,6 @@ class DocumentSession
             throw new DocumentException("unable to close session with pending changes - you must either flush() or commit() pending changes before calling close()");
         }
 
-        $this->releaseDatabase();
+        $this->unlock();
     }
 }
