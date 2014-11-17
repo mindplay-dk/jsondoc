@@ -15,9 +15,7 @@ use PHP_CodeCoverage_Report_Text;
 
 header('Content-type: text/plain');
 
-/** @var \Composer\Autoload\ClassLoader $autoloader */
-$autoloader = require dirname(__DIR__) . '/vendor/autoload.php';
-$autoloader->addPsr4('mindplay\jsondoc\\', dirname(__DIR__) . '/mindplay/jsondoc');
+require dirname(__DIR__) . '/vendor/autoload.php';
 
 // FIXTURES:
 
