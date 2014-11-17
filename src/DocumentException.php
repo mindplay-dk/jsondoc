@@ -6,7 +6,9 @@ use Exception;
 
 class DocumentException extends Exception
 {
-    /** @var Exception */
+    /**
+     * @var Exception
+     */
     protected $inner_exception = null;
 
     /**

@@ -9,14 +9,32 @@ use mindplay\jsonfreeze\JsonSerializer;
  */
 class DocumentStore
 {
+    /**
+     * @var string absolute path to document store root folder
+     */
     protected $path;
+
+    /**
+     * @var JsonSerializer
+     */
     protected $serializer;
 
-    protected $namePattern = '/^[\w-]+$/';
-
+    /**
+     * @var int permission mask applied to created directories
+     */
     public $dirMode = 0755;
+
+    /**
+     * @var int permission mask applied to created files
+     */
     public $fileMode = 0755;
 
+    /**
+     * @param string              $path absolute path to document store root folder
+     * @param JsonSerializer|null $serializer
+     *
+     * @throws DocumentException if the given path does not exist
+     */
     public function __construct($path, JsonSerializer $serializer = null)
     {
         $path = rtrim($path, DIRECTORY_SEPARATOR);
@@ -34,33 +52,47 @@ class DocumentStore
     }
 
     /**
-     * Creates a new DocumentSession with the given database-name.
+     * Opens a new Session with the given database-name.
+     *
+     * @return DocumentSession
      */
     public function openSession($database)
     {
         return new DocumentSession($this, $database);
     }
 
+    /**
+     * @return string absolute path to document store root folder
+     */
     public function getPath()
     {
         return $this->path;
     }
 
+    /**
+     * @return JsonSerializer
+     */
     public function getSerializer()
     {
         return $this->serializer;
     }
 
     /**
-     * Returns true if the given name is valid - otherwise returns false.
+     * @return bool true, if the given name is valid; otherwise false
      */
     public function isValidName($name)
     {
-        return preg_match($this->namePattern, $name) === 1;
+        return preg_match('/^[\w-]+$/', $name) === 1;
     }
 
     /**
-     * Ensures that the given path is a directory - or throws a DocumentException
+     * Ensures that the given path is a directory and/or creates it.
+     *
+     * @param string $path absolute path to directory
+     *
+     * @return void
+     *
+     * @throws DocumentException if the given path is not a directory, or could not be created
      */
     public function ensureDir($path)
     {
@@ -82,7 +114,12 @@ class DocumentStore
 
     /**
      * Reads the contents of a physical file at the given path.
-     * Throws a DocumentException if the given path does not point to a file.
+     *
+     * @param string $path absolute path to a file
+     *
+     * @return string file contents
+     *
+     * @throws DocumentException if the specified file could not be read
      */
     public function readFile($path)
     {
@@ -97,6 +134,13 @@ class DocumentStore
 
     /**
      * Writes data to a physical file at the given path, creating the path if necessary.
+     *
+     * @param string $path absolute path to the file to write
+     * @param string $data file contents
+     *
+     * @return void
+     *
+     * @throws DocumentException if unable to write the file (or set permissions)
      */
     public function writeFile($path, $data)
     {
@@ -120,6 +164,13 @@ class DocumentStore
 
     /**
      * Move a file, replacing any existing file in the destination path.
+     *
+     * @param string $from absolute source path
+     * @param string $to absolute destination path
+     *
+     * @return void
+     *
+     * @throws DocumentException if the specified file could not be moved
      */
     public function moveFile($from, $to)
     {
@@ -135,7 +186,13 @@ class DocumentStore
     }
 
     /**
-     * Delete a file - throws a DocumentException if the file does not exist.
+     * Delete a file.
+     *
+     * @param string $path absolute path of the file to be deleted
+     *
+     * @return void
+     *
+     * @throws DocumentException if the specified file could not be deleted
      */
     public function deleteFile($path)
     {
