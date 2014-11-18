@@ -30,7 +30,7 @@ class Foo
 function createStore($db_path)
 {
     $mask = umask(0);
-    @mkdir($db_path, 0666, true);
+    @mkdir($db_path, 0777, true);
     umask($mask);
 
     return new DocumentStore($db_path);
@@ -52,7 +52,7 @@ test(
         rm_r($db_path); // clean up from a previous failed run
 
         $mask = umask(0);
-        mkdir($db_path, 0666);
+        mkdir($db_path, 0777);
         umask($mask);
 
         $store = createStore($db_path);
