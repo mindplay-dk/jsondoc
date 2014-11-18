@@ -2,8 +2,6 @@
 
 namespace mindplay\jsondoc;
 
-use mindplay\jsonfreeze\JsonSerializer;
-
 /**
  * This component represents a session with a DocumentStore
  */
@@ -45,6 +43,11 @@ class DocumentSession
     protected $lock_path;
 
     /**
+     * @var Persistence document persistence layer
+     */
+    protected $persistence;
+
+    /**
      * @var resource file-handle used when locking the database
      */
     private $_lock = null;
@@ -56,12 +59,13 @@ class DocumentSession
     /**
      * Opens a new session with the given store and the specified database.
      *
-     * @param DocumentStore $store    the Store from which this Session was generated
-     * @param string        $database database name
+     * @param DocumentStore $store       the Store from which this Session was generated
+     * @param Persistence   $persistence the document persistence layer
+     * @param string        $database    database name
      *
      * @throws DocumentException on invalid database name
      */
-    public function __construct(DocumentStore $store, $database)
+    public function __construct(DocumentStore $store, Persistence $persistence, $database)
     {
         if (!$store->isValidName($database)) {
             throw new DocumentException("invalid database name: {$database}");
@@ -69,7 +73,9 @@ class DocumentSession
 
         $path = $store->getPath() . DIRECTORY_SEPARATOR . $database;
 
-        $store->ensureDir($path);
+        $this->persistence = $persistence;
+
+        $this->persistence->ensureDir($path);
 
         $this->store = $store;
         $this->database = $database;
@@ -189,7 +195,7 @@ class DocumentSession
 
         if (!array_key_exists($id, $this->status)) {
             $path = $this->mapPath($id);
-            $data = $this->store->readFile($path);
+            $data = $this->persistence->readFile($path);
 
             $this->objects[$id] = $this->store->getSerializer()->unserialize($data);
             $this->status[$id] = self::STATUS_KEEP;
@@ -352,9 +358,9 @@ class DocumentSession
         try {
             foreach ($this->files as $path => $data) {
                 if ($data === null) {
-                    $this->store->moveFile($path, $path . $temp); // move deleted document to temp-file
+                    $this->persistence->moveFile($path, $path . $temp); // move deleted document to temp-file
                 } else {
-                    $this->store->writeFile($path . $temp, $data); // write stored document to temp-file
+                    $this->persistence->writeFile($path . $temp, $data); // write stored document to temp-file
                 }
             }
         } catch (DocumentException $e) {
@@ -363,11 +369,11 @@ class DocumentSession
             foreach ($this->files as $path => $data) {
                 if ($data === null) {
                     if (file_exists($path . $temp)) {
-                        $this->store->moveFile($path . $temp, $path); // move deleted document back in place
+                        $this->persistence->moveFile($path . $temp, $path); // move deleted document back in place
                     }
                 } else {
                     if (file_exists($path . $temp)) {
-                        $this->store->deleteFile($path . $temp); // delete stored document temp-file
+                        $this->persistence->deleteFile($path . $temp); // delete stored document temp-file
                     }
                 }
             }
@@ -380,9 +386,9 @@ class DocumentSession
         try {
             foreach ($this->files as $path => $data) {
                 if ($data === null) {
-                    $this->store->deleteFile($path . $temp); // remove deleted document
+                    $this->persistence->deleteFile($path . $temp); // remove deleted document
                 } else {
-                    $this->store->moveFile($path . $temp, $path); // move stored document from temp-file in place
+                    $this->persistence->moveFile($path . $temp, $path); // move stored document from temp-file in place
                 }
             }
         } catch (DocumentException $e) {
