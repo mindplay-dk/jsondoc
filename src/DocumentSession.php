@@ -13,44 +13,24 @@ class DocumentSession
     protected $store;
 
     /**
-     * @var string database name
-     */
-    protected $database;
-
-    /**
-     * @var string root path to the database-folder.
-     */
-    protected $path;
-
-    /**
-     * @var object[] map where object_id => object
+     * @var object[] map where document ID => object
      */
     protected $objects = array();
 
     /**
-     * @var int[] map where object_id => object status (see STATUS_* constants)
+     * @var int[] map where document ID => object status (see STATUS_* constants)
      */
     protected $status = array();
 
     /**
-     * @var string[] map of data to be written on save(), where absolute path => JSON string
+     * @var string[] map of data to be written on save(), where document ID => JSON string
      */
     protected $files = array();
-
-    /**
-     * @var string absolute path to the database lock-file.
-     */
-    protected $lock_path;
 
     /**
      * @var Persistence document persistence layer
      */
     protected $persistence;
-
-    /**
-     * @var resource file-handle used when locking the database
-     */
-    private $_lock = null;
 
     const STATUS_KEEP = 0;
     const STATUS_STORE = 1;
@@ -61,28 +41,13 @@ class DocumentSession
      *
      * @param DocumentStore $store       the Store from which this Session was generated
      * @param Persistence   $persistence the document persistence layer
-     * @param string        $database    database name
-     *
-     * @throws DocumentException on invalid database name
      */
-    public function __construct(DocumentStore $store, Persistence $persistence, $database)
+    public function __construct(DocumentStore $store, Persistence $persistence)
     {
-        if (!$store->isValidName($database)) {
-            throw new DocumentException("invalid database name: {$database}");
-        }
-
-        $path = $store->getPath() . DIRECTORY_SEPARATOR . $database;
-
+        $this->store = $store;
         $this->persistence = $persistence;
 
-        $this->persistence->ensureDir($path);
-
-        $this->store = $store;
-        $this->database = $database;
-        $this->path = $path;
-
-        $this->lock_path = $this->path . DIRECTORY_SEPARATOR . '.lock';
-        $this->lock();
+        $persistence->lock();
     }
 
     /**
@@ -90,92 +55,7 @@ class DocumentSession
      */
     public function __destruct()
     {
-        $this->close();
-    }
-
-    /**
-     * Lock the database associated with this session.
-     *
-     * @param bool $exclusive true to lock the session exclusively;
-     *                        or false to lock in shared mode, allowing other sessions to read
-     *
-     * @return void
-     *
-     * @throws DocumentException if unable to lock the database
-     */
-    protected function lock($exclusive = false)
-    {
-        $this->unlock();
-
-        $mask = umask(0);
-
-        $lock = @fopen($this->lock_path, 'a');
-
-        @chmod($this->lock_path, 0666);
-
-        umask($mask);
-
-        if ($lock === false) {
-            throw new DocumentException("unable to create the lock-file: {$this->lock_path}");
-        }
-
-        if (@flock($lock, $exclusive === true ? LOCK_EX : LOCK_SH) === false) {
-            throw new DocumentException("unable to lock the database: {$this->lock_path}");
-        }
-
-        $this->_lock = $lock;
-    }
-
-    /**
-     * Release a lock on the database associated with this session.
-     *
-     * @return void
-     */
-    protected function unlock()
-    {
-        if ($this->isLocked()) {
-            flock($this->_lock, LOCK_UN);
-
-            $this->_lock = null;
-        }
-    }
-
-    /**
-     * @return bool true, if the database is currently locked
-     */
-    protected function isLocked()
-    {
-        return $this->_lock !== null;
-    }
-
-    /**
-     * Maps the given id to a physical path.
-     *
-     * @param string $id document ID
-     *
-     * @return string absolute path to JSON document file
-     *
-     * @throws DocumentException if the given document ID is invalid
-     */
-    protected function mapPath($id)
-    {
-        if (!is_string($id)) {
-            throw new DocumentException("the given id is not a string");
-        }
-
-        $path = $this->path;
-
-        foreach (explode('/', $id) as $part) {
-            if (!$this->store->isValidName($part)) {
-                throw new DocumentException("invalid document id: {$id} - invalid name: {$part}");
-            }
-
-            $path .= DIRECTORY_SEPARATOR . $part;
-        }
-
-        $path .= '.json';
-
-        return $path;
+//         $this->close(); // TODO debug locking issue
     }
 
     /**
@@ -189,13 +69,12 @@ class DocumentSession
      */
     public function load($id)
     {
-        if (! $this->isLocked()) {
+        if (! $this->persistence->isLocked()) {
             throw new DocumentException("cannot load an object into a closed session");
         }
 
         if (!array_key_exists($id, $this->status)) {
-            $path = $this->mapPath($id);
-            $data = $this->persistence->readFile($path);
+            $data = $this->persistence->readFile($id);
 
             $this->objects[$id] = $this->store->getSerializer()->unserialize($data);
             $this->status[$id] = self::STATUS_KEEP;
@@ -218,11 +97,9 @@ class DocumentSession
      */
     public function store($object, $id)
     {
-        if (! $this->isLocked()) {
+        if (! $this->persistence->isLocked()) {
             throw new DocumentException("cannot store an object in a closed session");
         }
-
-        $path = $this->mapPath($id);
 
         if (array_key_exists($id, $this->status)) {
             if ($this->status[$id] === self::STATUS_DELETE) {
@@ -230,7 +107,7 @@ class DocumentSession
             }
         }
 
-        $this->files[$path] = $this->store->getSerializer()->serialize($object);
+        $this->files[$id] = $this->store->getSerializer()->serialize($object);
         $this->objects[$id] = $object;
         $this->status[$id] = self::STATUS_STORE;
     }
@@ -247,7 +124,7 @@ class DocumentSession
      */
     public function getId($object)
     {
-        if (! $this->isLocked()) {
+        if (! $this->persistence->isLocked()) {
             throw new DocumentException("cannot determine the id of an object in a closed session");
         }
 
@@ -281,7 +158,7 @@ class DocumentSession
      */
     public function exists($id)
     {
-        return array_key_exists($id, $this->objects) || $this->persistence->fileExists($this->mapPath($id));
+        return array_key_exists($id, $this->objects) || $this->persistence->fileExists($id);
     }
 
     /**
@@ -295,14 +172,12 @@ class DocumentSession
      */
     public function delete($id)
     {
-        if (! $this->isLocked()) {
+        if (! $this->persistence->isLocked()) {
             throw new DocumentException("cannot delete an object from a closed session");
         }
 
-        $path = $this->mapPath($id);
-
-        if (!$this->persistence->fileExists($path)) {
-            throw new DocumentException("the given document id does not exist");
+        if (!$this->persistence->fileExists($id)) {
+            throw new DocumentException("the given document id does not exist: {$id}");
         }
 
         if (array_key_exists($id, $this->status) && $this->status[$id] === self::STATUS_STORE) {
@@ -310,7 +185,7 @@ class DocumentSession
         }
 
         $this->status[$id] = self::STATUS_DELETE;
-        $this->files[$path] = null;
+        $this->files[$id] = null;
     }
 
     /**
@@ -325,13 +200,11 @@ class DocumentSession
      */
     public function evict($id)
     {
-        if (! $this->isLocked()) {
+        if (! $this->persistence->isLocked()) {
             throw new DocumentException("cannot evict an object from a closed session");
         }
 
-        $path = $this->mapPath($id);
-        unset($this->files[$path]);
-
+        unset($this->files[$id]);
         unset($this->status[$id]);
         unset($this->objects[$id]);
     }
@@ -345,7 +218,7 @@ class DocumentSession
      */
     public function commit()
     {
-        if (! $this->isLocked()) {
+        if (! $this->persistence->isLocked()) {
             throw new DocumentException("this session has been closed - only an open session can be saved");
         }
 
@@ -353,49 +226,49 @@ class DocumentSession
 
         $temp = '.' . md5(mt_rand()) . '.tmp';
 
-        $this->lock(true);
+        $this->persistence->lock(true);
 
         try {
-            foreach ($this->files as $path => $data) {
+            foreach ($this->files as $id => $data) {
                 if ($data === null) {
-                    $this->persistence->moveFile($path, $path . $temp); // move deleted document to temp-file
+                    $this->persistence->moveFile($id, $id . $temp); // move deleted document to temp-file
                 } else {
-                    $this->persistence->writeFile($path . $temp, $data); // write stored document to temp-file
+                    $this->persistence->writeFile($id . $temp, $data); // write stored document to temp-file
                 }
             }
         } catch (DocumentException $e) {
             // Roll back any changes:
 
-            foreach ($this->files as $path => $data) {
+            foreach ($this->files as $id => $data) {
                 if ($data === null) {
-                    if ($this->persistence->fileExists($path . $temp)) {
-                        $this->persistence->moveFile($path . $temp, $path); // move deleted document back in place
+                    if ($this->persistence->fileExists($id . $temp)) {
+                        $this->persistence->moveFile($id . $temp, $id); // move deleted document back in place
                     }
                 } else {
-                    if ($this->persistence->fileExists($path . $temp)) {
-                        $this->persistence->deleteFile($path . $temp); // delete stored document temp-file
+                    if ($this->persistence->fileExists($id . $temp)) {
+                        $this->persistence->deleteFile($id . $temp); // delete stored document temp-file
                     }
                 }
             }
 
-            $this->lock(false);
+            $this->persistence->lock(false);
 
             throw new DocumentException("an error occurred while committing changes to documents - changes were rolled back", $e);
         }
 
         try {
-            foreach ($this->files as $path => $data) {
+            foreach ($this->files as $id => $data) {
                 if ($data === null) {
-                    $this->persistence->deleteFile($path . $temp); // remove deleted document
+                    $this->persistence->deleteFile($id . $temp); // remove deleted document
                 } else {
-                    $this->persistence->moveFile($path . $temp, $path); // move stored document from temp-file in place
+                    $this->persistence->moveFile($id . $temp, $id); // move stored document from temp-file in place
                 }
             }
         } catch (DocumentException $e) {
             throw new DocumentException("an error occurred while committing changes to documents - changes could not be rolled back!", $e);
         }
 
-        $this->lock(false);
+        $this->persistence->lock(false);
 
         $this->files = array();
 
@@ -424,7 +297,7 @@ class DocumentSession
 
     /**
      * Closes the session and releases the lock on the database - you must either
-     * save() or cancel() any pending changes prior to calling this method.
+     * commit() or flush() any pending changes prior to calling this method.
      *
      * Note that the session is automatically closed when is falls out of scope.
      *
@@ -438,6 +311,6 @@ class DocumentSession
             throw new DocumentException("unable to close session with pending changes - you must either flush() or commit() pending changes before calling close()");
         }
 
-        $this->unlock();
+        $this->persistence->unlock();
     }
 }

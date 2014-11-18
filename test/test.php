@@ -3,7 +3,9 @@
 namespace mindplay\jsondoc\test;
 
 use mindplay\jsondoc\DocumentStore;
+use mindplay\jsondoc\FilePersistence;
 
+use Exception;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;
@@ -22,18 +24,6 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 class Foo
 {
     public $bar;
-}
-
-/**
- * @return DocumentStore
- */
-function createStore($db_path)
-{
-    $mask = umask(0);
-    @mkdir($db_path, 0777, true);
-    umask($mask);
-
-    return new DocumentStore($db_path);
 }
 
 if (coverage()) {
@@ -55,9 +45,14 @@ test(
         mkdir($db_path, 0777);
         umask($mask);
 
-        $store = createStore($db_path);
+        $persistence = new FilePersistence($db_path);
+        $store = new DocumentStore($persistence);
 
-        $session = $store->openSession('sampledb');
+        ok(! $persistence->isLocked(), 'initially unlocked');
+
+        $session = $store->openSession();
+
+        ok($persistence->isLocked(), 'locked after opening a session');
 
         $a = new Foo;
         $a->bar = 'one';
@@ -75,19 +70,23 @@ test(
 
         $session->commit();
 
+        ok($persistence->isLocked(), 'remains locked after commit()');
+
         eq($session->load('foo/a'), $a, 'can get first stored object after saving');
         eq($session->load('foo/b'), $b, 'can get second stored object after saving');
-        eq($session->getId($b), 'foo/b', 'ca get the ID of a stored object');
+        eq($session->getId($b), 'foo/b', 'can get the ID of a stored object');
 
         $session->close();
+
+        ok(! $persistence->isLocked(), 'unlocked after close()');
 
         unset($a);
         unset($b);
 
-        ok(file_exists($db_path . '/sampledb/foo/a.json'), 'first document stored in the expected location');
-        ok(file_exists($db_path . '/sampledb/foo/b.json'), 'second document stored in the expected location');
+        ok(file_exists($db_path . '/foo/a.json'), 'first document stored in the expected location');
+        ok(file_exists($db_path . '/foo/b.json'), 'second document stored in the expected location');
 
-        $session = $store->openSession('sampledb');
+        $session = $store->openSession();
 
         $a = $session->load('foo/a');
         $b = $session->load('foo/b');
@@ -109,13 +108,13 @@ test(
 
         $session->commit();
 
-        ok(! file_exists($db_path . '/sampledb/foo/a.json'), 'file foo/a.json should be deleted');
+        ok(! file_exists($db_path . '/foo/a.json'), 'file foo/a.json should be deleted');
 
-        ok (file_exists($db_path . '/sampledb/foo/b.json'), 'file foo/b.json should not be deleted');
+        ok (file_exists($db_path . '/foo/b.json'), 'file foo/b.json should not be deleted');
 
         $session->close();
 
-        $session = $store->openSession('sampledb');
+        $session = $store->openSession();
 
         $c = new Foo();
         $c->bar = 'three';
@@ -198,6 +197,7 @@ function test($name, $function)
         call_user_func($function);
     } catch (Exception $e) {
         ok(false, "UNEXPECTED EXCEPTION", $e);
+        echo $e->getTraceAsString();
     }
 }
 

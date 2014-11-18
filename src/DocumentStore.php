@@ -10,11 +10,6 @@ use mindplay\jsonfreeze\JsonSerializer;
 class DocumentStore
 {
     /**
-     * @var string absolute path to document store root folder
-     */
-    protected $path;
-
-    /**
      * @var JsonSerializer
      */
     protected $serializer;
@@ -25,54 +20,29 @@ class DocumentStore
     protected $persistence;
 
     /**
-     * @param string              $path absolute path to document store root folder
+     * @param Persistence         $persistence persistence layer
      * @param JsonSerializer|null $serializer
      *
      * @throws DocumentException if the given path does not exist
      */
-    public function __construct($path, JsonSerializer $serializer = null)
+    public function __construct(Persistence $persistence, JsonSerializer $serializer = null)
     {
-        $path = rtrim($path, DIRECTORY_SEPARATOR);
-
-        if (!is_dir($path)) {
-            throw new DocumentException("path does not exist: {$path}");
-        }
-
         if ($serializer === null) {
             $serializer = new JsonSerializer();
         }
 
-        $this->path = $path;
         $this->serializer = $serializer;
-        $this->persistence = $this->createPersistence();
+        $this->persistence = $persistence;
     }
 
     /**
-     * @return Persistence
-     */
-    protected function createPersistence()
-    {
-        return new FilePersistence();
-    }
-
-    /**
-     * Opens a new Session with the given database-name.
-     *
-     * @param string $database database name
+     * Opens a new Session with this Store.
      *
      * @return DocumentSession
      */
-    public function openSession($database)
+    public function openSession()
     {
-        return new DocumentSession($this, $this->persistence, $database);
-    }
-
-    /**
-     * @return string absolute path to document store root folder
-     */
-    public function getPath()
-    {
-        return $this->path;
+        return new DocumentSession($this, $this->persistence);
     }
 
     /**
@@ -81,15 +51,5 @@ class DocumentStore
     public function getSerializer()
     {
         return $this->serializer;
-    }
-
-    /**
-     * @param string $name
-     *
-     * @return bool true, if the given name is valid; otherwise false
-     */
-    public function isValidName($name)
-    {
-        return preg_match('/^[\w-]+$/', $name) === 1;
     }
 }
