@@ -255,6 +255,8 @@ class DocumentSession
     }
 
     /**
+     * Check if this Session currently contains an object with the given document ID.
+     *
      * @param string $id document ID
      *
      * @return bool true, if an object with the given id is active in this session; otherwise false
@@ -262,6 +264,18 @@ class DocumentSession
     public function contains($id)
     {
         return array_key_exists($id, $this->objects);
+    }
+
+    /**
+     * Check if the database contains a document with the given ID.
+     *
+     * @param string $id document ID
+     *
+     * @return bool true, if a document with the given ID has been stored; otherwise false
+     */
+    public function exists($id)
+    {
+        return array_key_exists($id, $this->objects) || file_exists($this->mapPath($id));
     }
 
     /**
@@ -397,7 +411,7 @@ class DocumentSession
      */
     public function flush()
     {
-        foreach (array_keys($this->objects) as $id) {
+        foreach (array_keys($this->status) as $id) {
             $this->evict($id);
         }
     }

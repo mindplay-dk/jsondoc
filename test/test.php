@@ -115,6 +115,22 @@ test(
 
         $session->close();
 
+        $session = $store->openSession('sampledb');
+
+        $c = new Foo();
+        $c->bar = 'three';
+
+        $session->store($c, 'foo/c');
+
+        $session->delete('foo/b');
+
+        $session->flush();
+
+        eq($session->contains('foo/c'), false, 'store operation rolled back (object evicted)');
+        eq($session->exists('foo/b'), true, 'delete operation rolled back (document still exists)');
+
+        $session->close();
+
         rm_r($db_path); // clean up
     }
 );
