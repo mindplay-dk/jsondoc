@@ -4,7 +4,7 @@
         "Read more about it at http://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
         "This file is @generated automatically"
     ],
-    "hash": "778561c86535b6107731ddc7d37db69e",
+    "hash": "f736cc202d573bd336c7d81408c0c774",
     "packages": [
         {
             "name": "mindplay/jsonfreeze",
