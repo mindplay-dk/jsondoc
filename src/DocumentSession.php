@@ -153,7 +153,7 @@ class DocumentSession
      *
      * @param string $id document ID
      *
-     * @return string absolutel path to JSON document file
+     * @return string absolute path to JSON document file
      *
      * @throws DocumentException if the given document ID is invalid
      */
@@ -281,7 +281,7 @@ class DocumentSession
      */
     public function exists($id)
     {
-        return array_key_exists($id, $this->objects) || file_exists($this->mapPath($id));
+        return array_key_exists($id, $this->objects) || $this->persistence->fileExists($this->mapPath($id));
     }
 
     /**
@@ -301,7 +301,7 @@ class DocumentSession
 
         $path = $this->mapPath($id);
 
-        if (!file_exists($path)) {
+        if (!$this->persistence->fileExists($path)) {
             throw new DocumentException("the given document id does not exist");
         }
 
@@ -368,11 +368,11 @@ class DocumentSession
 
             foreach ($this->files as $path => $data) {
                 if ($data === null) {
-                    if (file_exists($path . $temp)) {
+                    if ($this->persistence->fileExists($path . $temp)) {
                         $this->persistence->moveFile($path . $temp, $path); // move deleted document back in place
                     }
                 } else {
-                    if (file_exists($path . $temp)) {
+                    if ($this->persistence->fileExists($path . $temp)) {
                         $this->persistence->deleteFile($path . $temp); // delete stored document temp-file
                     }
                 }

@@ -63,4 +63,13 @@ interface Persistence
      * @throws DocumentException if the specified file could not be deleted
      */
     public function deleteFile($path);
+
+    /**
+     * Checks if a file exists
+     *
+     * @param string $path absolute path to the file to check
+     *
+     * @return bool true, if the specified file exists
+     */
+    public function fileExists($path);
 }

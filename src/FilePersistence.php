@@ -5,7 +5,7 @@ namespace mindplay\jsondoc;
 /**
  * This class is responsible for creating, reading, writing and deleting files and folders.
  */
-class FileManager implements Persistence
+class FilePersistence implements Persistence
 {
     /**
      * @var int permission mask applied to created directories
@@ -99,5 +99,13 @@ class FileManager implements Persistence
         if (@unlink($path) === false) {
             throw new DocumentException("unable to delete file: {$path}");
         }
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function fileExists($path)
+    {
+        return file_exists($path);
     }
 }

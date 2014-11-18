@@ -52,7 +52,7 @@ class DocumentStore
      */
     protected function createPersistence()
     {
-        return new FileManager();
+        return new FilePersistence();
     }
 
     /**
