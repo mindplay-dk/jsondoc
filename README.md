@@ -3,6 +3,12 @@ mindplay/jsondoc
 
 Simple, file-based object/document-database using JSON-files for persistence.
 
+[![Build Status](https://travis-ci.org/mindplay-dk/jsondoc.svg?branch=master)](https://travis-ci.org/mindplay-dk/jsondoc)
+
+[![Scrutinizer Code Quality](https://scrutinizer-ci.com/g/mindplay-dk/jsondoc/badges/quality-score.png?b=master)](https://scrutinizer-ci.com/g/mindplay-dk/jsondoc/?branch=master)
+
+[![Code Coverage](https://scrutinizer-ci.com/g/mindplay-dk/jsondoc/badges/coverage.png?b=master)](https://scrutinizer-ci.com/g/mindplay-dk/jsondoc/?branch=master)
+
 
 Overview
 --------
