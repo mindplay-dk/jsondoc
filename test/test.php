@@ -34,6 +34,8 @@ if (coverage()) {
 
     $filter->addDirectoryToWhitelist(dirname(__DIR__) . '/src');
 
+    coverage()->setProcessUncoveredFilesFromWhitelist(true);
+
     coverage()->start('test');
 }
 
