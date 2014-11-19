@@ -13,6 +13,16 @@ class DocumentSession
     protected $store;
 
     /**
+     * @var Persistence document persistence layer
+     */
+    protected $persistence;
+
+    /**
+     * @var Mutex mutual exclusion handler for the Persistence layer
+     */
+    protected $mutex;
+
+    /**
      * @var object[] map where document ID => object
      */
     protected $objects = array();
@@ -23,14 +33,9 @@ class DocumentSession
     protected $status = array();
 
     /**
-     * @var string[] map of data to be written on save(), where document ID => JSON string
+     * @var string[] map of documents to be written on save(), where document ID => JSON string
      */
-    protected $files = array();
-
-    /**
-     * @var Persistence document persistence layer
-     */
-    protected $persistence;
+    protected $docs = array();
 
     const STATUS_KEEP = 0;
     const STATUS_STORE = 1;
@@ -44,10 +49,12 @@ class DocumentSession
      */
     public function __construct(DocumentStore $store, Persistence $persistence)
     {
+        $mutex = $persistence->createMutex();
+        $mutex->lock();
+
         $this->store = $store;
         $this->persistence = $persistence;
-
-        $persistence->lock();
+        $this->mutex = $mutex;
     }
 
     /**
@@ -55,7 +62,7 @@ class DocumentSession
      */
     public function __destruct()
     {
-//         $this->close(); // TODO debug locking issue
+         $this->close();
     }
 
     /**
@@ -69,12 +76,12 @@ class DocumentSession
      */
     public function load($id)
     {
-        if (! $this->persistence->isLocked()) {
+        if (! $this->mutex->isLocked()) {
             throw new DocumentException("cannot load an object into a closed session");
         }
 
         if (!array_key_exists($id, $this->status)) {
-            $data = $this->persistence->readFile($id);
+            $data = $this->persistence->readDocument($id);
 
             $this->objects[$id] = $this->store->getSerializer()->unserialize($data);
             $this->status[$id] = self::STATUS_KEEP;
@@ -97,7 +104,7 @@ class DocumentSession
      */
     public function store($object, $id)
     {
-        if (! $this->persistence->isLocked()) {
+        if (! $this->mutex->isLocked()) {
             throw new DocumentException("cannot store an object in a closed session");
         }
 
@@ -107,7 +114,7 @@ class DocumentSession
             }
         }
 
-        $this->files[$id] = $this->store->getSerializer()->serialize($object);
+        $this->docs[$id] = $this->store->getSerializer()->serialize($object);
         $this->objects[$id] = $object;
         $this->status[$id] = self::STATUS_STORE;
     }
@@ -124,7 +131,7 @@ class DocumentSession
      */
     public function getId($object)
     {
-        if (! $this->persistence->isLocked()) {
+        if (! $this->mutex->isLocked()) {
             throw new DocumentException("cannot determine the id of an object in a closed session");
         }
 
@@ -158,7 +165,7 @@ class DocumentSession
      */
     public function exists($id)
     {
-        return array_key_exists($id, $this->objects) || $this->persistence->fileExists($id);
+        return array_key_exists($id, $this->objects) || $this->persistence->documentExists($id);
     }
 
     /**
@@ -172,11 +179,11 @@ class DocumentSession
      */
     public function delete($id)
     {
-        if (! $this->persistence->isLocked()) {
+        if (! $this->mutex->isLocked()) {
             throw new DocumentException("cannot delete an object from a closed session");
         }
 
-        if (!$this->persistence->fileExists($id)) {
+        if (!$this->persistence->documentExists($id)) {
             throw new DocumentException("the given document id does not exist: {$id}");
         }
 
@@ -185,7 +192,7 @@ class DocumentSession
         }
 
         $this->status[$id] = self::STATUS_DELETE;
-        $this->files[$id] = null;
+        $this->docs[$id] = null;
     }
 
     /**
@@ -200,11 +207,11 @@ class DocumentSession
      */
     public function evict($id)
     {
-        if (! $this->persistence->isLocked()) {
+        if (! $this->mutex->isLocked()) {
             throw new DocumentException("cannot evict an object from a closed session");
         }
 
-        unset($this->files[$id]);
+        unset($this->docs[$id]);
         unset($this->status[$id]);
         unset($this->objects[$id]);
     }
@@ -218,7 +225,7 @@ class DocumentSession
      */
     public function commit()
     {
-        if (! $this->persistence->isLocked()) {
+        if (! $this->mutex->isLocked()) {
             throw new DocumentException("this session has been closed - only an open session can be saved");
         }
 
@@ -226,51 +233,51 @@ class DocumentSession
 
         $temp = '.' . md5(mt_rand()) . '.tmp';
 
-        $this->persistence->lock(true);
+        $this->mutex->lock(true);
 
         try {
-            foreach ($this->files as $id => $data) {
+            foreach ($this->docs as $id => $data) {
                 if ($data === null) {
-                    $this->persistence->moveFile($id, $id . $temp); // move deleted document to temp-file
+                    $this->persistence->moveDocument($id, $id . $temp); // move deleted document to temp-file
                 } else {
-                    $this->persistence->writeFile($id . $temp, $data); // write stored document to temp-file
+                    $this->persistence->writeDocument($id . $temp, $data); // write stored document to temp-file
                 }
             }
         } catch (DocumentException $e) {
             // Roll back any changes:
 
-            foreach ($this->files as $id => $data) {
+            foreach ($this->docs as $id => $data) {
                 if ($data === null) {
-                    if ($this->persistence->fileExists($id . $temp)) {
-                        $this->persistence->moveFile($id . $temp, $id); // move deleted document back in place
+                    if ($this->persistence->documentExists($id . $temp)) {
+                        $this->persistence->moveDocument($id . $temp, $id); // move deleted document back in place
                     }
                 } else {
-                    if ($this->persistence->fileExists($id . $temp)) {
-                        $this->persistence->deleteFile($id . $temp); // delete stored document temp-file
+                    if ($this->persistence->documentExists($id . $temp)) {
+                        $this->persistence->deleteDocument($id . $temp); // delete stored document temp-file
                     }
                 }
             }
 
-            $this->persistence->lock(false);
+            $this->mutex->lock(false);
 
             throw new DocumentException("an error occurred while committing changes to documents - changes were rolled back", $e);
         }
 
         try {
-            foreach ($this->files as $id => $data) {
+            foreach ($this->docs as $id => $data) {
                 if ($data === null) {
-                    $this->persistence->deleteFile($id . $temp); // remove deleted document
+                    $this->persistence->deleteDocument($id . $temp); // remove deleted document
                 } else {
-                    $this->persistence->moveFile($id . $temp, $id); // move stored document from temp-file in place
+                    $this->persistence->moveDocument($id . $temp, $id); // move stored document from temp-file in place
                 }
             }
         } catch (DocumentException $e) {
             throw new DocumentException("an error occurred while committing changes to documents - changes could not be rolled back!", $e);
         }
 
-        $this->persistence->lock(false);
+        $this->mutex->lock(false);
 
-        $this->files = array();
+        $this->docs = array();
 
         foreach ($this->status as $id => $status) {
             if ($status === self::STATUS_DELETE) {
@@ -307,10 +314,10 @@ class DocumentSession
      */
     public function close()
     {
-        if (count($this->files) > 0) {
+        if (count($this->docs) > 0) {
             throw new DocumentException("unable to close session with pending changes - you must either flush() or commit() pending changes before calling close()");
         }
 
-        $this->persistence->unlock();
+        $this->mutex->unlock();
     }
 }

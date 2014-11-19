@@ -2,12 +2,15 @@
 
 namespace mindplay\jsondoc\test;
 
+use mindplay\jsondoc\DocumentSession;
 use mindplay\jsondoc\DocumentStore;
+use mindplay\jsondoc\Mutex;
 use mindplay\jsondoc\FilePersistence;
 
 use Exception;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use ReflectionProperty;
 use SplFileInfo;
 
 use PHP_CodeCoverage;
@@ -34,6 +37,18 @@ if (coverage()) {
     coverage()->start('test');
 }
 
+/**
+ * @param DocumentSession $session
+ * @return bool true, if the given Session is locked
+ */
+function isLocked(DocumentSession $session)
+{
+    /** @var Mutex $mutex */
+    $mutex = inspect($session, 'mutex');
+
+    return $mutex->isLocked();
+}
+
 test(
     'Document store and session behavior',
     function () {
@@ -47,12 +62,9 @@ test(
 
         $persistence = new FilePersistence($db_path);
         $store = new DocumentStore($persistence);
-
-        ok(! $persistence->isLocked(), 'initially unlocked');
-
         $session = $store->openSession();
 
-        ok($persistence->isLocked(), 'locked after opening a session');
+        ok(isLocked($session), 'locked after opening a session');
 
         $a = new Foo;
         $a->bar = 'one';
@@ -70,7 +82,7 @@ test(
 
         $session->commit();
 
-        ok($persistence->isLocked(), 'remains locked after commit()');
+        ok(isLocked($session), 'remains locked after commit()');
 
         eq($session->load('foo/a'), $a, 'can get first stored object after saving');
         eq($session->load('foo/b'), $b, 'can get second stored object after saving');
@@ -78,7 +90,7 @@ test(
 
         $session->close();
 
-        ok(! $persistence->isLocked(), 'unlocked after close()');
+        ok(! isLocked($session), 'unlocked after close()');
 
         unset($a);
         unset($b);
@@ -254,6 +266,23 @@ function expect($exception_type, $why, $function)
     }
 
     ok(false, "$why (expected exception $exception_type was NOT thrown)");
+}
+
+/**
+ * Inspect a protected or private property (by means of reflection)
+ *
+ * @param object $object      the object from which to retrieve a property
+ * @param string $property_name the property name
+ *
+ * @return mixed the property value
+ */
+function inspect($object, $property_name)
+{
+    $property = new ReflectionProperty(get_class($object), $property_name);
+
+    $property->setAccessible(true);
+
+    return $property->getValue($object);
 }
 
 /**

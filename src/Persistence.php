@@ -8,81 +8,65 @@ namespace mindplay\jsondoc;
 interface Persistence
 {
     /**
-     * Lock the database associated with this session.
+     * Creates a Mutex for use in a Session
      *
-     * @param bool $exclusive true to lock the session exclusively;
-     *                        or false to lock in shared mode, allowing other sessions to read
+     * @return Mutex
+     */
+    public function createMutex();
+
+    /**
+     * Reads the contents of a document with the given document ID.
+     *
+     * @param string $id document ID
+     *
+     * @return string content
+     *
+     * @throws DocumentException if the specified document could not be read
+     */
+    public function readDocument($id);
+
+    /**
+     * Writes (or overwrites) a document with the given document ID.
+     *
+     * @param string $id document ID
+     * @param string $data content
      *
      * @return void
      *
-     * @throws DocumentException if unable to lock the database
+     * @throws DocumentException if the document could not be written
      */
-    public function lock($exclusive = false);
+    public function writeDocument($id, $data);
 
     /**
-     * Release a lock on the database associated with this session.
+     * Change the ID of an existing document, possibly replacing another
+     * existing document with the same ID.
      *
-     * @return void
-     */
-    public function unlock();
-
-    /**
-     * @return bool true, if the database is currently locked
-     */
-    public function isLocked();
-
-    /**
-     * Reads the contents of a physical file at the given path.
-     *
-     * @param string $path absolute path to a file
-     *
-     * @return string file contents
-     *
-     * @throws DocumentException if the specified file could not be read
-     */
-    public function readFile($path);
-
-    /**
-     * Writes data to a physical file at the given path, creating the path if necessary.
-     *
-     * @param string $path absolute path to the file to write
-     * @param string $data file contents
+     * @param string $from_id source document ID
+     * @param string $to_id   destination document ID
      *
      * @return void
      *
-     * @throws DocumentException if unable to write the file (or set permissions)
+     * @throws DocumentException if the document could not be moved
      */
-    public function writeFile($path, $data);
+    public function moveDocument($from_id, $to_id);
 
     /**
-     * Move a file, replacing any existing file in the destination path.
+     * Delete a document.
      *
-     * @param string $from absolute source path
-     * @param string $to   absolute destination path
+     * @param string $id document ID
      *
      * @return void
      *
-     * @throws DocumentException if the specified file could not be moved
+     * @throws DocumentException if the document could not be deleted
      */
-    public function moveFile($from, $to);
+    public function deleteDocument($id);
 
     /**
-     * Delete a file.
+     * Checks if a document exists.
      *
-     * @param string $path absolute path of the file to be deleted
+     * @param string $id document ID
      *
-     * @return void
-     *
-     * @throws DocumentException if the specified file could not be deleted
+     * @return bool true, if the document exists; otherwise false
      */
-    public function deleteFile($path);
-
-    /**
-     * Checks if a file exists
-     *
-     * @param string $path absolute path to the file to check
-     *
-     * @return bool true, if the specified file exists
-     */
-    public function fileExists($path);
+    public function documentExists($id);
 }

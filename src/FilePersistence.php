@@ -18,16 +18,6 @@ class FilePersistence implements Persistence
     public $file_mode;
 
     /**
-     * @var string absolute path to the database lock-file.
-     */
-    protected $lock_path;
-
-    /**
-     * @var resource file-handle used when locking the database
-     */
-    private $_lock = null;
-
-    /**
      * @var string absolute path to persistence root folder
      */
     private $_root;
@@ -53,8 +43,6 @@ class FilePersistence implements Persistence
         $this->_root = $root_path;
 
         $this->ensureDir($root_path);
-
-        $this->lock_path = $root_path . DIRECTORY_SEPARATOR . '.lock';
     }
 
     /**
@@ -127,53 +115,7 @@ class FilePersistence implements Persistence
     /**
      * @inheritdoc
      */
-    public function lock($exclusive = false)
-    {
-        $this->unlock();
-
-        $mask = umask(0);
-
-        $lock = @fopen($this->lock_path, 'a');
-
-        @chmod($this->lock_path, 0666);
-
-        umask($mask);
-
-        if ($lock === false) {
-            throw new DocumentException("unable to create the lock-file: {$this->lock_path}");
-        }
-
-        if (@flock($lock, $exclusive === true ? LOCK_EX : LOCK_SH) === false) {
-            throw new DocumentException("unable to lock the database: {$this->lock_path}");
-        }
-
-        $this->_lock = $lock;
-    }
-
-    /**
-     * @inheritdoc
-     */
-    public function unlock()
-    {
-        if ($this->isLocked()) {
-            flock($this->_lock, LOCK_UN);
-
-            $this->_lock = null;
-        }
-    }
-
-    /**
-     * @inheritdoc
-     */
-    public function isLocked()
-    {
-        return $this->_lock !== null;
-    }
-
-    /**
-     * @inheritdoc
-     */
-    public function readFile($id)
+    public function readDocument($id)
     {
         $path = $this->mapPath($id);
 
@@ -189,7 +131,7 @@ class FilePersistence implements Persistence
     /**
      * @inheritdoc
      */
-    public function writeFile($id, $data)
+    public function writeDocument($id, $data)
     {
         $path = $this->mapPath($id);
 
@@ -214,7 +156,7 @@ class FilePersistence implements Persistence
     /**
      * @inheritdoc
      */
-    public function moveFile($from_id, $to_id)
+    public function moveDocument($from_id, $to_id)
     {
         $from = $this->mapPath($from_id);
         $to = $this->mapPath($to_id);
@@ -233,7 +175,7 @@ class FilePersistence implements Persistence
     /**
      * @inheritdoc
      */
-    public function deleteFile($id)
+    public function deleteDocument($id)
     {
         $path = $this->mapPath($id);
 
@@ -245,10 +187,18 @@ class FilePersistence implements Persistence
     /**
      * @inheritdoc
      */
-    public function fileExists($id)
+    public function documentExists($id)
     {
         $path = $this->mapPath($id);
 
         return file_exists($path);
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function createMutex()
+    {
+        return new FileMutex($this->_root);
     }
 }
