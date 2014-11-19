@@ -44,18 +44,20 @@ save/delete operations atomically.
 Usage
 -----
 
-Connect to a data-store by creating a DocumentStore and pointing it to
-an already existing root-folder:
+Create a DocumentStore with FilePersistence and point it to an existing folder:
 
 ```PHP
-$store = new DocumentStore($dbpath);
+$store = new DocumentStore(new FilePersistence($db_path));
 ```
 
-Connect to a database by opening a session, specifying a database-name:
+Ask the DocumentStore to create a DocumentSession:
 
 ```PHP
-$session = $store->openSession('sampledb');
+$session = $store->openSession();
 ```
+
+This will lock the store in shared mode, until you `close()` the session. (it will
+also automatically close if it falls out of scope.)
 
 Now create objects of any class, and store them:
 
@@ -65,6 +67,9 @@ $a->bar = 'Hello, World.';
 
 $session->store($a, 'foo/bar');
 ```
+
+Note that the state of the object has been capture in-memory, but it has not yet
+been persisted at this stage.
 
 Load objects from the database into the current session:
 
@@ -78,11 +83,29 @@ Delete unwanted objects:
 $session->delete('foo/baz');
 ```
 
-Then commit all pending store/delete-operations to the database:
+Call `commit()` to persist all the pending store/delete-operations:
 
 ```PHP
 $session->commit();
 ```
+
+Finally, you should `close()` to explicitly release the lock:
+
+```PHP
+$session->close();
+```
+
+The `DocumentSession` API also provides a few other operations:
+
+ * `exists($id)` indicates whether a document with the given ID exists in the store.
+
+ * `contains($id)` indicates whether the session contains a document with a given ID.
+
+ * `getId($object)` provides the document ID of an object in the session.
+
+ * `evict($id)` evicts the object/document with the given ID from the session.
+
+ * `flush()` evicts all objects/documents and pending operations from the session.
 
 
 Limitations
@@ -90,7 +113,7 @@ Limitations
 
 Using individual, flat files for data-storage is *not fast* - this
 library (by design) is optimized for consistent storage, quick and
-easy implementation, human-readablea and CSV-compatible file-based
+easy implementation, human-readablea and VCS-compatible file-based
 storage, in applications where speed is not a critical factor.
 
 The JsonSerializer itself has an important limitation: it is designed
