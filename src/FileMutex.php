@@ -2,6 +2,11 @@
 
 namespace mindplay\jsondoc;
 
+/**
+ * File-based mutual exclusion lock
+ *
+ * @see FilePersistence::createMutex()
+ */
 class FileMutex implements Mutex
 {
     /**
@@ -25,27 +30,17 @@ class FileMutex implements Mutex
     /**
      * @inheritdoc
      */
-    public function lock($exclusive = false)
+    public function exclusiveLock()
     {
-        $this->unlock();
+        $this->_lock(true);
+    }
 
-        $mask = umask(0);
-
-        $lock = @fopen($this->_path, 'a');
-
-        @chmod($this->_path, 0666);
-
-        umask($mask);
-
-        if ($lock === false) {
-            throw new DocumentException("unable to create the lock-file: {$this->_path}");
-        }
-
-        if (@flock($lock, $exclusive === true ? LOCK_EX : LOCK_SH) === false) {
-            throw new DocumentException("unable to lock the database: {$this->_path}");
-        }
-
-        $this->_lock = $lock;
+    /**
+     * @inheritdoc
+     */
+    public function sharedLock()
+    {
+        $this->_lock(false);
     }
 
     /**
@@ -66,5 +61,33 @@ class FileMutex implements Mutex
     public function isLocked()
     {
         return $this->_lock !== null;
+    }
+
+    /**
+     * @param bool $exclusive true to lock in exclusive mode; false to lock in shared mode
+     *
+     * @throws DocumentException if unable to acquire the lock
+     */
+    private function _lock($exclusive)
+    {
+        $this->unlock();
+
+        $mask = umask(0);
+
+        $lock = @fopen($this->_path, 'a');
+
+        @chmod($this->_path, 0666);
+
+        umask($mask);
+
+        if ($lock === false) {
+            throw new DocumentException("unable to create the lock-file: {$this->_path}");
+        }
+
+        if (@flock($lock, $exclusive === true ? LOCK_EX : LOCK_SH) === false) {
+            throw new DocumentException("unable to lock the database: {$this->_path}");
+        }
+
+        $this->_lock = $lock;
     }
 }

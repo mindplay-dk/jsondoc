@@ -1,6 +1,6 @@
 <?php
-namespace mindplay\jsondoc;
 
+namespace mindplay\jsondoc;
 
 /**
  * This class is responsible for creating, reading, writing and deleting files and folders.

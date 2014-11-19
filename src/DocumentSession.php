@@ -50,7 +50,7 @@ class DocumentSession
     public function __construct(DocumentStore $store, Persistence $persistence)
     {
         $mutex = $persistence->createMutex();
-        $mutex->lock();
+        $mutex->sharedLock();
 
         $this->store = $store;
         $this->persistence = $persistence;
@@ -233,7 +233,7 @@ class DocumentSession
 
         $temp = '.' . md5(mt_rand()) . '.tmp';
 
-        $this->mutex->lock(true);
+        $this->mutex->exclusiveLock();
 
         try {
             foreach ($this->docs as $id => $data) {
@@ -258,7 +258,7 @@ class DocumentSession
                 }
             }
 
-            $this->mutex->lock(false);
+            $this->mutex->sharedLock();
 
             throw new DocumentException("an error occurred while committing changes to documents - changes were rolled back", $e);
         }
@@ -275,7 +275,7 @@ class DocumentSession
             throw new DocumentException("an error occurred while committing changes to documents - changes could not be rolled back!", $e);
         }
 
-        $this->mutex->lock(false);
+        $this->mutex->sharedLock();
 
         $this->docs = array();
 
