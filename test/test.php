@@ -144,6 +144,18 @@ test(
 
         $session->close();
 
+        $session = $store->openSession();
+
+        $d = new Foo();
+        $id = $session->append($d, 'foo', $uuid);
+        eq(strlen($uuid), 36, 'generates a UUID');
+        eq("foo/{$uuid}", $id, 'document ID is a child ID of the given parent ID');
+        eq($session->contains($id), true, 'the document was added to the session');
+
+        $session->commit();
+
+        $session->close();
+
         rm_r($db_path); // clean up
     }
 );

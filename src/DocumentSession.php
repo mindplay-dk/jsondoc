@@ -120,6 +120,32 @@ class DocumentSession
     }
 
     /**
+     * Stores the given object under a unique (UUID) child document ID below the specified ID.
+     *
+     * For example, a document appended to the ID "user" might get stored as "user/9ea2f9c3-5e7a-4d0a-a55f-4b3eed8cd426"
+     *
+     * @param object $object the object to store
+     * @param string|null $parent_id parent document ID (or NULL for root)
+     * @param string &$uuid return argument; optional; will be filled with the UUID part of the full document ID
+     *
+     * @return string child document ID
+     */
+    public function append($object, $parent_id, &$uuid = null)
+    {
+        do {
+            $uuid = UUID::create();
+
+            $id = $parent_id === null
+                ? $uuid
+                : "{$parent_id}/{$uuid}";
+        } while ($this->exists($id));
+
+        $this->store($object, $id);
+
+        return $id;
+    }
+
+    /**
      * Returns the id of a given object, already present in the active session.
      * If no object with the given id is present, a DocumentException is thrown.
      *
