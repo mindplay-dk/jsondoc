@@ -68,8 +68,20 @@ $a->bar = 'Hello, World.';
 $session->store($a, 'foo/bar');
 ```
 
-Note that the state of the object has been capture in-memory, but it has not yet
-been persisted at this stage.
+Note that the state of the object has been captured in-memory, but the serialized
+object does not get written to underlying storage until changes are committed.
+
+Alternatively, you can store an object with a generated UUID under a parent ID:
+
+```PHP
+$a = new Foo;
+$a->bar = 'Hello again!';
+
+$id = $session->append($a, 'foo', $uuid);
+
+var_dump($uuid); // "029d97a2-7676-45b1-9d49-353bec0d71c0"
+var_dump($id);   // "foo/029d97a2-7676-45b1-9d49-353bec0d71c0"
+```
 
 Load objects from the database into the current session:
 
@@ -113,7 +125,7 @@ Limitations
 
 Using individual, flat files for data-storage is *not fast* - this
 library (by design) is optimized for consistent storage, quick and
-easy implementation, human-readablea and VCS-compatible file-based
+easy implementation, human-readable and VCS-compatible file-based
 storage, in applications where speed is not a critical factor.
 
 The JsonSerializer itself has an important limitation: it is designed
