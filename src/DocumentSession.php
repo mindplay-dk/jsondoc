@@ -146,14 +146,15 @@ class DocumentSession
     }
 
     /**
-     * Returns the id of a given object, already present in the active session.
-     * If no object with the given id is present, a DocumentException is thrown.
+     * Returns the ID of a given object, already present in the active session.
+     *
+     * If no object with the given ID is present, this method returns NULL.
      *
      * @param object $object an object already present in this Session
      *
-     * @throws DocumentException if the given object isn't present in this Session
+     * @return string|null
      *
-     * @return object
+     * @throws DocumentException if the session is closed
      */
     public function getId($object)
     {
@@ -164,7 +165,7 @@ class DocumentSession
         $id = array_search($object, $this->objects, true);
 
         if ($id === false) {
-            throw new DocumentException("the given object is not present in this session");
+            return null; // object not present in active session
         }
 
         return $id;
